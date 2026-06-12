@@ -15,7 +15,8 @@ const SPEED = 3.2;
 const ctx = document.getElementById('hotel').getContext('2d');
 const ticker = document.getElementById('ticker');
 const avatars = new Map();
-const agentQueues = new Map();
+const agentQueues = new Map();              // session -> spawned-but-unclaimed avatar ids
+const agentAvatars = new Map();             // `${session}:${agent_id}` -> avatar id
 let agentCount = 0;
 
 const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -35,6 +36,8 @@ function send(av, station, text) {
   [av.tx, av.ty] = STATIONS[station];
   av.state = 'walking';
   av.pending = station === 'lobby' ? 'idle' : 'working';
+  av.activity = text || null;
+  av.since = performance.now();
   if (text) av.bubble = { text, t: performance.now() };
 }
 
@@ -50,22 +53,45 @@ function checkout(av) {
 }
 
 function handle(e) {
+  if (e.agent_id) handleAgent(e);
+  else handleMain(e);
+  tick(e);
+}
+
+function handleMain(e) {
   const main = ensureMain(e.session || '????');
+  main.waiting = false;
   if (e.event === 'UserPromptSubmit') send(main, 'reception', e.detail);
-  else if (e.event === 'PreToolUse' && e.tool === 'Task') {
+  else if (e.event === 'PreToolUse' && (e.tool === 'Task' || e.tool === 'Agent')) {
     const id = `agent:${e.session}:${agentCount++}`;
     send(spawn(id, e.agent_type || 'agent', true), randomStation(), e.agent_name);
     agentQueues.set(e.session, [...(agentQueues.get(e.session) || []), id]);
   } else if (e.event === 'PreToolUse')
     send(main, TOOL_STATION[e.tool] || 'lobby', `${e.tool}${e.detail ? ': ' + e.detail : ''}`);
-  else if (e.event === 'SubagentStop') {
-    const queue = agentQueues.get(e.session) || [];
-    const id = queue.shift();
-    if (id && avatars.has(id)) checkout(avatars.get(id));
+  else if (e.event === 'Notification') {
+    main.waiting = true;
+    main.bubble = { text: e.detail || 'needs attention', t: performance.now() };
   } else if (e.event === 'Stop') send(main, 'lobby', 'at your leisure');
   else if (e.event === 'SessionEnd')
     [...avatars.values()].filter(av => av.id.includes(e.session)).forEach(checkout);
-  tick(e);
+}
+
+function handleAgent(e) {                   // events fired inside a subagent
+  const key = `${e.session}:${e.agent_id}`;
+  if (e.event === 'SubagentStop') {
+    const id = agentAvatars.get(key) || (agentQueues.get(e.session) || []).shift();
+    agentAvatars.delete(key);
+    if (id && avatars.has(id)) checkout(avatars.get(id));
+    return;
+  }
+  let id = agentAvatars.get(key);
+  if (!id || !avatars.has(id)) {            // claim oldest unclaimed spawn, else walk in
+    id = (agentQueues.get(e.session) || []).shift()
+      || spawn(`agent:${key}`, e.agent_type || 'agent', true).id;
+    agentAvatars.set(key, id);
+  }
+  if (e.event === 'PreToolUse')
+    send(avatars.get(id), TOOL_STATION[e.tool] || 'lobby', `${e.tool}${e.detail ? ': ' + e.detail : ''}`);
 }
 
 function randomStation() {
@@ -83,7 +109,7 @@ function tick(e) {
 
 setInterval(() => {                         // idle agents wander to stations
   for (const av of avatars.values())
-    if (av.isAgent && !av.leaving && av.state !== 'walking' && Math.random() < .35)
+    if (av.isAgent && !av.leaving && av.state === 'idle' && Math.random() < .35)
       send(av, randomStation());
 }, 5000);
 
@@ -107,6 +133,27 @@ function frame(t) {
 }
 requestAnimationFrame(frame);
 
+const canvas = document.getElementById('hotel');
+const tooltip = document.getElementById('tooltip');
+canvas.addEventListener('mousemove', m => {
+  const r = canvas.getBoundingClientRect();
+  const mx = (m.clientX - r.left) * (canvas.width / r.width);
+  const my = (m.clientY - r.top) * (canvas.height / r.height);
+  let hit = null;
+  for (const av of avatars.values()) {
+    const { sx, sy } = iso(av.x, av.y);
+    if (Math.abs(mx - sx) < 16 && my > sy - 20 && my < sy + 32) hit = av;
+  }
+  if (hit) {
+    const secs = Math.round((performance.now() - (hit.since || performance.now())) / 1000);
+    tooltip.textContent = `${hit.name} · ${hit.waiting ? 'waiting on you' : hit.state}`
+      + `${hit.activity ? ' · ' + hit.activity : ''} · ${secs}s`;
+    tooltip.style.left = `${m.clientX + 14}px`;
+    tooltip.style.top = `${m.clientY + 14}px`;
+    tooltip.style.display = 'block';
+  } else tooltip.style.display = 'none';
+});
+
 const lamp = document.getElementById('lamp');
 const source = new EventSource('/events');
 source.onopen = () => lamp.classList.add('on');
@@ -118,14 +165,17 @@ if (new URLSearchParams(location.search).has('demo')) {
     { event: 'SessionStart', session: 'demo1234' },
     { event: 'UserPromptSubmit', session: 'demo1234', detail: 'build me a hotel' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Read', detail: 'server.py' },
-    { event: 'PreToolUse', session: 'demo1234', tool: 'Task', agent_type: 'Explore', agent_name: 'survey the lobby' },
+    { event: 'PreToolUse', session: 'demo1234', tool: 'Agent', agent_type: 'Explore', agent_name: 'survey the lobby' },
+    { event: 'PreToolUse', session: 'demo1234', agent_id: 'scout01', agent_type: 'Explore', tool: 'Grep', detail: 'lobby' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Edit', detail: 'hotel.js' },
-    { event: 'PreToolUse', session: 'demo1234', tool: 'Task', agent_type: 'Plan', agent_name: 'draw blueprints' },
+    { event: 'PreToolUse', session: 'demo1234', tool: 'Agent', agent_type: 'Plan', agent_name: 'draw blueprints' },
+    { event: 'PreToolUse', session: 'demo1234', agent_id: 'plan01', agent_type: 'Plan', tool: 'Read', detail: 'render.js' },
+    { event: 'Notification', session: 'demo1234', detail: 'permission needed: Bash' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Bash', detail: 'just test' },
-    { event: 'PreToolUse', session: 'demo1234', tool: 'WebSearch', detail: 'habbo furni' },
-    { event: 'SubagentStop', session: 'demo1234' },
+    { event: 'PreToolUse', session: 'demo1234', agent_id: 'scout01', agent_type: 'Explore', tool: 'WebSearch', detail: 'habbo furni' },
+    { event: 'SubagentStop', session: 'demo1234', agent_id: 'scout01' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Write', detail: 'render.js' },
-    { event: 'SubagentStop', session: 'demo1234' },
+    { event: 'SubagentStop', session: 'demo1234', agent_id: 'plan01' },
     { event: 'Stop', session: 'demo1234' },
   ];
   let i = 0;

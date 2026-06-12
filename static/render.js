@@ -104,6 +104,12 @@ function drawAvatar(ctx, av, t) {
   const bob = av.state === 'walking' ? Math.abs(Math.sin(t / 90)) * 4
             : av.state === 'working' ? Math.abs(Math.sin(t / 160)) * 2 : 0;
   const base = feet - bob;
+  if (av.waiting) {                                          // needs the user's attention
+    ctx.fillStyle = `rgba(212,169,83,${.3 + Math.sin(t / 180) * .2})`;
+    ctx.beginPath();
+    ctx.ellipse(cx, base - 20, 22, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   px(ctx, cx, base, -9, -4, 8, 4, '#2b1622');               // shoes
   px(ctx, cx, base, 1, -4, 8, 4, '#2b1622');
   px(ctx, cx, base, -8, -13, 7, 9, '#3a3a4a');              // legs

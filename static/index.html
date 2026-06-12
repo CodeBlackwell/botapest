@@ -71,6 +71,13 @@
   #ticker div { padding: 4px 12px; border-bottom: 1px dashed var(--pink-deep); }
   #ticker div:first-child { background: var(--pink); }
   #ticker .t { color: var(--plum-soft); margin-right: 8px; }
+  #tooltip {
+    position: fixed; display: none; pointer-events: none; z-index: 10;
+    background: var(--cream); border: 2px solid var(--plum);
+    box-shadow: 3px 3px 0 var(--plum);
+    font-family: 'Silkscreen', monospace; font-size: 10px;
+    padding: 4px 8px; max-width: 320px;
+  }
 </style>
 </head>
 <body>
@@ -81,6 +88,7 @@
   </header>
   <div class="frame"><canvas id="hotel" width="964" height="560"></canvas></div>
   <div id="ticker"></div>
+  <div id="tooltip"></div>
   <script src="render.js"></script>
   <script src="hotel.js"></script>
 </body>

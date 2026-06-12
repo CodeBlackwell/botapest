@@ -12,6 +12,7 @@ BACKUP = SETTINGS.with_suffix(".json.botapest.bak")
 EVENTS = [
     "SessionStart",
     "UserPromptSubmit",
+    "Notification",
     "PreToolUse",
     "PostToolUse",
     "Stop",

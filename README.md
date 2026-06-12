@@ -26,18 +26,18 @@ runs a scripted day at the hotel.
 Claude Code hooks ──curl──▶ POST /hook ──▶ normalize ──SSE──▶ canvas renderer
 ```
 
-- `hooks.py` registers a `curl -m 1 ... || true` command on seven hook events
-  (SessionStart, UserPromptSubmit, Pre/PostToolUse, Stop, SubagentStop,
-  SessionEnd). It never blocks Claude Code — if the hotel isn't running, the
-  curl times out silently.
+- `hooks.py` registers a `curl -m 1 ... || true` command on eight hook events
+  (SessionStart, UserPromptSubmit, Notification, Pre/PostToolUse, Stop,
+  SubagentStop, SessionEnd). It never blocks Claude Code — if the hotel isn't
+  running, the curl times out silently.
 - `server.py` (FastAPI) trims each payload to `{event, session, tool, detail}`
-  and broadcasts over SSE. No storage; the hotel only shows the present.
+  (plus `agent_id`/`agent_type` for events fired inside subagents), keeps the
+  last 100 events, and broadcasts over SSE — late-joining browsers get a replay.
 - `static/render.js` + `static/hotel.js` draw the room and guests on a plain
-  canvas — original pixel art, no Habbo assets.
+  canvas — original pixel art, no Habbo assets. Subagent tool calls move their
+  own guest, a pulsing gold aura marks a session waiting on you (permission or
+  idle), and hovering a guest shows who they are and what they're doing.
 
 ## Known limits (v0)
 
-- Tool calls made *by subagents* fire the same hooks without an agent id, so
-  they animate the concierge. Per-guest attribution needs transcript tailing
-  (`~/.claude/projects/<proj>/agent-*.jsonl`) — the natural v1.
 - Front-facing avatars only; no directional sprites yet.
