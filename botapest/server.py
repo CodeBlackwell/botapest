@@ -110,4 +110,12 @@ async def events() -> StreamingResponse:
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
+@app.middleware("http")
+async def no_stale_assets(request: Request, call_next):
+    # static files change on every botapest upgrade; force revalidation (304s keep it cheap)
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")

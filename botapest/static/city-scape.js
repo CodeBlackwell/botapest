@@ -18,6 +18,24 @@ const CityScape = (() => {
         if (code <= 1) tile(ctx, cam, x, y, alt ? '#241622' : '#211420');
         else if (code === 2) tile(ctx, cam, x, y, alt ? '#2c4a34' : '#28432f');
         else if (code === 3) tile(ctx, cam, x, y, alt ? '#e3d2b2' : '#d8c5a0');
+        else if (code === 4) {
+          tile(ctx, cam, x, y, alt ? '#16323c' : '#142e38');
+          if ((x * 7 + y * 11) % 6 === 0) {                 // river shimmer
+            const p = proj(cam, x + .5, y + .5);
+            ctx.strokeStyle = `rgba(190,228,238,${Math.max(0, .1 + .1 * Math.sin(t / 650 + x * 1.7 + y))})`;
+            ctx.lineWidth = Math.max(1, cam.s);
+            ctx.beginPath(); ctx.moveTo(p.sx - 5 * cam.s, p.sy); ctx.lineTo(p.sx + 5 * cam.s, p.sy); ctx.stroke();
+          }
+        } else if (code === 5) {
+          tile(ctx, cam, x, y, alt ? '#3b2c39' : '#372a35');
+          const a = proj(cam, x, y), b = proj(cam, x, y + 1), c = proj(cam, x + 1, y), d = proj(cam, x + 1, y + 1);
+          ctx.strokeStyle = 'rgba(212,169,83,.55)';         // chain-bridge rails
+          ctx.lineWidth = Math.max(1, 1.2 * cam.s);
+          ctx.beginPath();
+          ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy);
+          ctx.moveTo(c.sx, c.sy); ctx.lineTo(d.sx, d.sy);
+          ctx.stroke();
+        } else if (code === 6) tile(ctx, cam, x, y, alt ? '#27392c' : '#233428');
         else tile(ctx, cam, x, y, state.blocks[code - 10].pave[alt]);
         if (code === 1 && x % 2) {                          // avenue lane dash
           const a = proj(cam, x + .25, y + .5), b = proj(cam, x + .75, y + .5);
@@ -93,6 +111,15 @@ const CityScape = (() => {
       ctx.fillRect(sx - s, base - 16 * s, 2 * s, 16 * s);
       ctx.fillStyle = `rgba(255,214,120,${.65 + .25 * Math.sin(t / 800 + p.seed)})`;
       ctx.fillRect(sx - 2 * s, base - 19 * s, 4 * s, 3.5 * s);
+    } else if (p.kind === 'grave') {
+      ctx.fillStyle = '#6e7178';
+      if (p.seed % 3) {                                     // headstone
+        ctx.fillRect(sx - 2.5 * s, base - 7 * s, 5 * s, 7 * s);
+        ctx.fillRect(sx - 1.5 * s, base - 8 * s, 3 * s, s);
+      } else {                                              // cross
+        ctx.fillRect(sx - s, base - 9 * s, 2 * s, 9 * s);
+        ctx.fillRect(sx - 3 * s, base - 7 * s, 6 * s, 2 * s);
+      }
     } else if (p.kind === 'crates') {
       ctx.fillStyle = '#9c6b35';
       ctx.fillRect(sx - 6 * s, base - 6 * s, 6 * s, 6 * s);
@@ -102,5 +129,53 @@ const CityScape = (() => {
     }
   }
 
-  return { drawGround, drawWater, drawHorizon, drawProp };
+  function drawStation(ctx, cam, state, t) {                // package deps arrive as freight
+    const s = cam.s, x = -1.8;                              // open left edge: nothing occludes it
+    ctx.strokeStyle = '#564a58';
+    ctx.lineWidth = Math.max(1, 1.2 * s);
+    for (const dx of [0, .3]) {                             // rails
+      const a = proj(cam, x + dx, .5), b = proj(cam, x + dx, state.H - .5);
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+    }
+    const cars = state.deps.slice(0, Math.floor((state.H - 5) / 1.6));
+    cars.forEach((dep, i) => {
+      const p = proj(cam, x + .15, 4.5 + i * 1.6), seed = hash(dep);
+      ctx.fillStyle = CARS[seed % CARS.length];
+      ctx.fillRect(p.sx - 8 * s, p.sy - 9 * s, 16 * s, 7 * s);
+      ctx.fillStyle = '#1a0a16';
+      ctx.fillRect(p.sx - 6 * s, p.sy - 2.5 * s, 3 * s, 2.5 * s);
+      ctx.fillRect(p.sx + 3 * s, p.sy - 2.5 * s, 3 * s, 2.5 * s);
+    });
+    const d = proj(cam, x, state.H - 1.5);                  // depot at the open foreground end
+    ctx.fillStyle = '#5a2c4d';
+    ctx.fillRect(d.sx - 8 * s, d.sy - 14 * s, 16 * s, 14 * s);
+    ctx.fillStyle = '#ffd678';
+    ctx.fillRect(d.sx - 3 * s, d.sy - 10 * s, 6 * s, 5 * s);
+    if (s >= .7) {
+      ctx.fillStyle = 'rgba(243,207,217,.7)';
+      ctx.font = `${Math.max(7, 8 * s)}px Silkscreen, monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${state.deps.length} PKGS`, d.sx, d.sy - 18 * s);
+    }
+  }
+
+  function drawPort(ctx, cam, state, t) {                   // container ships per docker file
+    const s = cam.s;
+    for (let i = 0; i < Math.min(3, state.docker); i++) {
+      const p = proj(cam, state.W * .25 + i * 7, state.H + 2.2);
+      const sy = p.sy + Math.sin(t / 1200 + i * 2.1) * 1.5 * s;
+      ctx.fillStyle = '#2b2230';
+      ctx.fillRect(p.sx - 23 * s, sy, 46 * s, 9 * s);
+      ctx.fillStyle = '#d8c5a0';
+      ctx.fillRect(p.sx + 13 * s, sy - 8 * s, 7 * s, 8 * s);
+      for (let k = 0; k < 4; k++) {
+        ctx.fillStyle = CARS[(i * 4 + k) % CARS.length];
+        ctx.fillRect(p.sx + (-20 + k * 8) * s, sy - 6 * s, 7 * s, 6 * s);
+      }
+      ctx.fillStyle = `rgba(255,90,90,${.45 + .4 * Math.sin(t / 700 + i)})`;
+      ctx.fillRect(p.sx + 15.5 * s, sy - 11 * s, 2 * s, 2 * s);
+    }
+  }
+
+  return { drawGround, drawWater, drawHorizon, drawProp, drawStation, drawPort };
 })();

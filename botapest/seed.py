@@ -4,6 +4,7 @@ Per building: loc (mass), commits + age (attention), centrality (how many
 other components it has co-committed with). A component may set "group": N
 to aggregate files into one building per N-segment path prefix.
 """
+import json
 import re
 import subprocess
 import time
@@ -41,6 +42,40 @@ def scan(path: Path) -> tuple[int, int, int, int]:
     except OSError:
         pass
     return loc, classes, imports, todos
+
+
+def parse_deps(repo: str, files: list[str]) -> list[str]:
+    import tomllib
+    found = set()
+    for f in files:
+        name = f.rsplit("/", 1)[-1].lower()
+        if name not in ("package.json", "pyproject.toml") and \
+           not (name.startswith("requirements") and name.endswith(".txt")):
+            continue
+        try:
+            text = Path(repo, f).read_text(errors="ignore")
+            if name == "package.json":
+                data = json.loads(text)
+                found |= set(data.get("dependencies", {})) | set(data.get("devDependencies", {}))
+            elif name == "pyproject.toml":
+                reqs = tomllib.loads(text).get("project", {}).get("dependencies", [])
+                found |= {re.split(r"[<>=~!\[; ]", r, 1)[0] for r in reqs}
+            else:
+                found |= {re.split(r"[<>=~!\[; ]", li.strip(), 1)[0]
+                          for li in text.splitlines() if li.strip() and li.lstrip()[0] not in "#-"}
+        except (ValueError, OSError):            # fixture/vendored manifests may be malformed
+            continue
+    return sorted(found)
+
+
+def dead_files(repo: str, alive: set[str]) -> list[str]:
+    gone: list[str] = []
+    for line in git(repo, "log", "-M", "--diff-filter=D", "--name-only", "--pretty=").splitlines():
+        if line and line not in alive and line not in gone:
+            gone.append(line)
+        if len(gone) == 24:                     # cemetery plot capacity
+            break
+    return gone
 
 
 def seed(repo: str, zone: dict) -> dict:
@@ -89,4 +124,7 @@ def seed(repo: str, zone: dict) -> dict:
         exts.setdefault(key, Counter())[Path(f).suffix.lstrip(".").lower()] += 1
     for key, b in buildings.items():
         b["ext"] = exts[key].most_common(1)[0][0]
-    return {"zone": zone, "buildings": list(buildings.values())}
+    docker = sum(1 for f in comp if "dockerfile" in f.lower() or "compose.y" in f.lower())
+    return {"zone": zone, "buildings": list(buildings.values()),
+            "deps": parse_deps(repo, list(comp)), "docker": docker,
+            "dead": dead_files(repo, set(comp))}

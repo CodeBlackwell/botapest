@@ -47,12 +47,18 @@ const City = (() => {
       const rows = Math.max(2, Math.ceil(total / (W - streets - 2)));
       const widths = need.map(n => Math.max(Math.ceil(n / rows),
         Math.min(Math.ceil(n / rows) + 1, Math.round((W - streets) * n / total))));
-      strips.push({ comps, lists, rows, widths, used: widths.reduce((a, b) => a + b, 0) + streets });
+      strips.push({ layer, comps, lists, rows, widths,
+                    used: widths.reduce((a, b) => a + b, 0) + streets });
     }
     W = Math.max(W, ...strips.map(s => s.used));
 
     let y = 0;
     for (const strip of strips) {
+      if (!state.river && y && ['front', 'under'].includes(strip.layer)) {
+        state.river = { y0: y, rows: 3 };                   // the Danube: back-of-stack bank | front bank
+        state.bridges = [.28, .52, .76].map(k => Math.round(W * k));
+        y += 4;                                             // +1 green promenade so towers don't hide the water
+      }
       let x = Math.floor((W - strip.used) / 2);
       strip.comps.forEach((comp, i) => {
         const block = { comp, list: strip.lists[i], x0: x, y0: y,
@@ -71,6 +77,15 @@ const City = (() => {
       });
       y += strip.rows + 1;                          // avenue after each strip
     }
+    if ((data.dead || []).length) {
+      state.graves = data.dead.map((path, i) =>
+        ({ kind: 'grave', path, x: 2.5 + (i % 8) * 1.2, y: y + .7 + Math.floor(i / 8), seed: hash(path) }));
+      state.cemetery = { y0: y, rows: Math.ceil(state.graves.length / 8), x1: Math.min(W - 1, 13) };
+      state.props.push(...state.graves);
+      y += state.cemetery.rows + 1;
+    }
+    state.deps = data.deps || [];
+    state.docker = data.docker || 0;
     state.W = W;
     state.H = y;
     buildGround(state);
@@ -84,7 +99,7 @@ const City = (() => {
     return state;
   }
 
-  // codes: 0 street, 1 avenue, 2 green, 3 plaza, 10+i district pavement
+  // codes: 0 street, 1 avenue, 2 green, 3 plaza, 4 river, 5 bridge, 6 cemetery, 10+i district pavement
   function buildGround(state) {
     const g = Array.from({ length: state.H }, () => new Array(state.W).fill(2));
     state.blocks.forEach((block, i) => {
@@ -97,6 +112,16 @@ const City = (() => {
     });
     for (const block of state.blocks)                       // avenue row under each strip
       for (let x = 0; x < state.W; x++) g[block.y0 + block.rows][x] = 1;
+    if (state.river) {
+      for (let r = 0; r < state.river.rows; r++)
+        for (let x = 0; x < state.W; x++)
+          g[state.river.y0 + r][x] = state.bridges.some(b => x === b || x === b + 1) ? 5 : 4;
+      for (const b of state.bridges)                        // bridge ramps cross the promenade
+        g[state.river.y0 + state.river.rows][b] = g[state.river.y0 + state.river.rows][b + 1] = 0;
+    }
+    if (state.cemetery)
+      for (let r = 0; r < state.cemetery.rows; r++)
+        for (let x = 1; x < state.cemetery.x1; x++) g[state.cemetery.y0 + r][x] = 6;
     g.forEach((row, y) => row.forEach((code, x) => {
       const h = hash(`g${x},${y}`);
       if (code === 2 && h % 3 === 0) state.props.push({ kind: 'tree', x: x + .5, y: y + .5, seed: h });
@@ -467,11 +492,13 @@ const City = (() => {
     CityScape.drawHorizon(ctx, cam, state, t);
     CityScape.drawWater(ctx, cam, state, t);
     CityScape.drawGround(ctx, cam, state, t);
+    if (state.deps.length) CityScape.drawStation(ctx, cam, state, t);
     for (const it of state.items) {
       if (it.kind) { if (!it.hidden) CityScape.drawProp(ctx, cam, it, t); }
       else drawBuilding(ctx, cam, it, t);
     }
     if (state.cityHall) drawCityHall(ctx, cam, state.cityHall.x, state.cityHall.y);
+    if (state.docker) CityScape.drawPort(ctx, cam, state, t);
     ctx.fillStyle = 'rgba(243,207,217,.6)';
     for (const block of state.blocks) {
       const p = proj(cam, block.x0 + block.cols / 2, block.y0 + block.rows + .55);
