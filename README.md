@@ -6,26 +6,33 @@ your main session checks in at reception, subagents walk through the door when
 spawned, and tool calls send workers to stations — the CRT terminal for `Bash`,
 the archive shelf for `Read`/`Grep`, the workshop for `Edit`/`Write`, the
 telephone booth for web tools. **The skyline above**: the city is the codebase
-itself, seeded from git history and zoned by architecture (`city/<repo>.json`
+itself, seeded from git history and zoned by architecture (a zoning manifest
 maps globs to components and layers; floors = cross-component centrality,
 footprint = lines of code, window glow = recency; managed services float as
 tethered clouds). As agents work, the city builds itself out — edits wrap
 buildings in scaffolding, a `git commit` drops the scaffolds and adds floors,
 new files pop up new buildings. `/city.html` is a full-screen explorer with
-pan/zoom. Re-seed with `just city <repo> [zone]`.
+pan/zoom. The city re-seeds itself from git whenever HEAD moves.
 
-## Quickstart
+## Install & run
 
 ```bash
-just attach    # one-time: adds fire-and-forget hooks to ~/.claude/settings.json
-just dev       # hotel on http://localhost:4242
+uv tool install /path/to/botapest   # installs the `botapest` CLI globally
+botapest attach                     # one-time: fire-and-forget hooks into ~/.claude/settings.json
+
+cd ~/code/any-repo
+botapest                            # its city on http://localhost:4242
 ```
 
 Open http://localhost:4242, then start any Claude Code session — new sessions
 report in automatically. No live session handy? http://localhost:4242/?demo
-runs a scripted day at the hotel.
+runs a scripted day in the city. `botapest detach` removes the hooks (a backup
+of settings.json is written on attach). Flags: `--repo`, `--port`, `--zone`.
 
-`just detach` removes the hooks (a backup of settings.json is written on attach).
+**Zoning:** if the repo has a `.botapest.json` manifest it defines the city's
+components, layers, and clouds (see `city/maisight.json` for a full example);
+otherwise botapest auto-zones from the repo's top-level directories. For repo
+hackers: `just dev` serves ../maisight with its manifest.
 
 ## How it works
 

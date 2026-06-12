@@ -1,20 +1,30 @@
-"""The Grand Botapest Hotel — event relay.
+"""Botapest City — event relay + city seeding.
 
-Receives Claude Code hook payloads on POST /hook, normalizes them,
-and broadcasts to browsers over SSE at GET /events.
+Receives Claude Code hook payloads on POST /hook, normalizes them, and
+broadcasts to browsers over SSE at GET /events. GET /city-data.json
+seeds the configured repo's city on demand (cached per git HEAD).
 """
 import asyncio
 import json
 import os
 from collections import deque
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from .seed import git, seed
+from .zone import load_zone
+
 app = FastAPI()
 subscribers: set[asyncio.Queue] = set()
 history: deque = deque(maxlen=100)
+city = {"repo": ".", "zone_path": None, "head": None, "data": None}
+
+
+def configure(repo: str, zone_path: str | None) -> None:
+    city.update(repo=repo, zone_path=zone_path, head=None, data=None)
 
 MAX_DETAIL = 80
 
@@ -68,6 +78,15 @@ async def hook(request: Request) -> dict:
     return {"ok": True}
 
 
+@app.get("/city-data.json")
+def city_data() -> dict:
+    head = git(city["repo"], "rev-parse", "HEAD").strip()
+    if city["head"] != head:
+        city["data"] = seed(city["repo"], load_zone(city["repo"], city["zone_path"]))
+        city["head"] = head
+    return city["data"]
+
+
 @app.get("/events")
 async def events() -> StreamingResponse:
     queue: asyncio.Queue = asyncio.Queue()
@@ -90,4 +109,4 @@ async def events() -> StreamingResponse:
     return StreamingResponse(stream(), media_type="text/event-stream")
 
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")

@@ -1,13 +1,10 @@
-"""Seed a city snapshot from a git repo + zoning manifest.
+"""Build a city snapshot from a git repo + zoning manifest.
 
-Usage: python cityseed.py <repo> <zone.json> > static/city-data.json
 Per building: loc (mass), commits + age (attention), centrality (how many
 other components it has co-committed with). A component may set "group": N
 to aggregate files into one building per N-segment path prefix.
 """
-import json
 import subprocess
-import sys
 import time
 from fnmatch import fnmatch
 from pathlib import Path
@@ -31,8 +28,7 @@ def count_lines(path: Path) -> int:
         return 0
 
 
-def main(repo: str, zone_path: str) -> None:
-    zone = json.loads(Path(zone_path).read_text())
+def seed(repo: str, zone: dict) -> dict:
     comp = {f: component_of(f, zone["components"]) for f in git(repo, "ls-files").splitlines()}
     files = [f for f, c in comp.items() if c]
 
@@ -69,8 +65,4 @@ def main(repo: str, zone_path: str) -> None:
         if last[f]:
             b["age_days"] = min(b["age_days"], round((now - last[f]) / 86400))
         b["files"] += 1
-    json.dump({"zone": zone, "buildings": list(buildings.values())}, sys.stdout)
-
-
-if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    return {"zone": zone, "buildings": list(buildings.values())}
