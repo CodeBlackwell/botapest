@@ -20,11 +20,33 @@ function cityHandle(e) {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'q' || e.key === 'e')
-    cityCam.rot = ((cityCam.rot || 0) + (e.key === 'q' ? 1 : 3)) % 4;
+    cityCam.rot = ((cityCam.rot || 0) + (e.key === 'q' ? 1 : 7)) % 8;
 });
+
+cityCanvas.addEventListener('wheel', m => {
+  m.preventDefault();
+  const r = cityCanvas.getBoundingClientRect();
+  const mx = (m.clientX - r.left) * (cityCanvas.width / r.width);
+  const my = (m.clientY - r.top) * (cityCanvas.height / r.height);
+  const k = m.deltaY < 0 ? 1.12 : 1 / 1.12;
+  cityCam.ox = mx + (cityCam.ox - mx) * k;
+  cityCam.oy = my + (cityCam.oy - my) * k;
+  cityCam.s *= k;
+}, { passive: false });
+
+let cityDrag = null;
+cityCanvas.addEventListener('mousedown', m => cityDrag = { x: m.clientX, y: m.clientY });
+window.addEventListener('mouseup', () => cityDrag = null);
 
 cityCanvas.addEventListener('mousemove', m => {
   const r = cityCanvas.getBoundingClientRect();
+  if (cityDrag) {
+    const kx = cityCanvas.width / r.width, ky = cityCanvas.height / r.height;
+    cityCam.ox += (m.clientX - cityDrag.x) * kx;
+    cityCam.oy += (m.clientY - cityDrag.y) * ky;
+    cityDrag = { x: m.clientX, y: m.clientY };
+    return;
+  }
   const hit = cityState && City.pick(cityState,
     (m.clientX - r.left) * (cityCanvas.width / r.width),
     (m.clientY - r.top) * (cityCanvas.height / r.height));

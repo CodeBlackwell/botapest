@@ -3,13 +3,29 @@
 const City = (() => {
   const HW = 26, HH = 13, FLOOR = 14;
   const proj = (cam, x, y) => {
-    for (let i = cam.rot || 0; i--;) { const t = x; x = cam.cx + y - cam.cy; y = cam.cy + cam.cx - t; }
+    const r = cam.rot || 0;
+    if (cam._r !== r) { cam._r = r; cam._c = Math.cos(r * Math.PI / 4); cam._s = Math.sin(r * Math.PI / 4); }
+    if (r) {
+      const dx = x - cam.cx, dy = y - cam.cy;
+      x = cam.cx + dx * cam._c + dy * cam._s;
+      y = cam.cy - dx * cam._s + dy * cam._c;
+    }
     return { sx: cam.ox + (x - y) * HW * cam.s, sy: cam.oy + (x + y) * HH * cam.s };
   };
   const lift = (p, h) => ({ sx: p.sx, sy: p.sy - h });
+  const lerp = (a, c, u) => ({ sx: a.sx + (c.sx - a.sx) * u, sy: a.sy + (c.sy - a.sy) * u });
   const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-  const DKEY = [p => p.x + p.y, p => p.y - p.x, p => -p.x - p.y, p => p.x - p.y];   // painter's key per quarter turn
-  const spin = (cam, pts) => cam.rot ? pts.map((_, j, a) => a[(j + cam.rot) % 4]) : pts;
+  const dkey = rot => {                                     // painter's key for any eighth turn
+    const a = rot * Math.PI / 4;
+    const u = Math.cos(a) - Math.sin(a), v = Math.cos(a) + Math.sin(a);
+    return p => u * p.x + v * p.y;
+  };
+  const spin = (cam, pts) => {                              // relabel corners: 0=screen top, then clockwise
+    if (!cam.rot) return pts;
+    let k = 0;
+    for (let i = 1; i < 4; i++) if (pts[i].sy < pts[k].sy) k = i;
+    return [...pts.slice(k), ...pts.slice(0, k)];
+  };
   const q = (vals, k) => vals.sort((x, y) => x - y)[Math.floor(vals.length * k)] ?? 0;
 
   function shade(hex, f) {
@@ -48,8 +64,9 @@ const City = (() => {
       const lists = comps.map(c => byComp[c.id] || []);
       const need = lists.map(l => Math.max(1, l.length) + 2);   // +2 spare lots for live growth
       const total = need.reduce((a, b) => a + b, 0);
-      let r1 = r, cap = 0;                                  // ring r holds 8r tiles minus 4 spokes;
-      while (cap < total) { if ((r1 - r) % 3 !== 2) cap += 8 * r1 - 4; r1++; }   // every 3rd ring is a street
+      const lanes = k => 8 * k - 4 - 4 * (Math.floor(k / 3) + Math.floor((k - 1) / 3));   // minus spokes + alleys
+      let r1 = r, cap = 0;
+      while (cap < total) { if ((r1 - r) % 3 !== 2) cap += lanes(r1); r1++; }    // every 3rd ring is a street
       annuli.push({ comps, lists, need, r0: r, r1, layer: comps[0].layer, tiles: [] });
       r = r1 + 2 + hash(`canal${annuli.length}`) % 2;       // canal between annuli, 2-3 rings wide
     }
@@ -72,7 +89,8 @@ const City = (() => {
       todos: q(data.buildings.map(b => b.todos || 0), .9) };
     for (const block of state.blocks) fillBlock(state, block);
     state.sortedRot = 0;
-    state.items = [...state.buildings, ...state.props].sort((a, b) => DKEY[0](a) - DKEY[0](b));
+    const k0 = dkey(0);
+    state.items = [...state.buildings, ...state.props].sort((a, b) => k0(a) - k0(b));
     state.clouds = data.zone.clouds.map((c, i) => ({ name: c.name, tether: c.tether, band: 60 + (i % 2) * 52 }));
     return state;
   }
@@ -90,6 +108,8 @@ const City = (() => {
           if (!ann) g[y][x] = !dx || !dy ? 5 : 4;           // grachtengordel: canal ring, spokes bridge it
           else if (!dx || !dy) g[y][x] = 0;                 // 4 radial spokes
           else if ((rr - ann.r0) % 3 === 2) g[y][x] = 1;    // minor ring street splits the wedge mass
+          else if ((Math.abs(dy) === rr ? Math.abs(dx) : Math.abs(dy)) % 3 === 0)
+            g[y][x] = 0;                                    // radial alley: max 2 buildings per row
           else ann.tiles.push({ x, y, r: rr, a: Math.atan2(dy, dx) });
         }
       }
@@ -127,16 +147,29 @@ const City = (() => {
     state.ground = g;
   }
 
+  // file-type forms: ext picks the massing; district kind still owns color + dressing
+  const FORM = { md: 'house', rst: 'house', txt: 'house',
+                 json: 'shed', yml: 'shed', yaml: 'shed', toml: 'shed', lock: 'shed',
+                 cfg: 'shed', ini: 'shed', html: 'storefront', css: 'storefront',
+                 sh: 'garage', sql: 'silo' };
+  const RANK = { storefront: 1, shed: 2, garage: 2, silo: 2, house: 3 };   // towers downtown, houses outermost
+  const FCAP = { house: 1, shed: 1, garage: 1, storefront: 2, silo: 3 };
+  const FFOOT = { house: .5, shed: .55, garage: .6, storefront: .9, silo: .6 };
+
   function fillBlock(state, block) {
     const under = block.comp.layer === 'under';
-    for (const b of block.list)                             // mass adds floors: +1 per loc decade past 100
+    for (const b of block.list) {                           // mass adds floors: +1 per loc decade past 100
       b.floors = under ? 1 : 1 + b.centrality + (b.commits > state.cuts.commits ? 1 : 0)
                + Math.max(0, Math.floor(Math.log10(b.loc + 1)) - 1);
+      b.floors = Math.min(b.floors, FCAP[FORM[b.ext]] ?? 14);
+    }
     const cuts = { commits: q(block.list.map(b => b.commits), 2 / 3),
                    age: q(block.list.map(b => b.age_days), 1 / 3) };
     for (const b of block.list)                             // each district spotlights its own active third
       b.billboard = b.commits > cuts.commits || b.age_days < cuts.age;
-    block.list.sort((a, b) => b.floors - a.floors);         // lots run downtown→outskirts: towers center
+    block.list.sort((a, b) =>                               // lots run downtown→outskirts: towers center,
+      (RANK[FORM[a.ext]] ?? 0) - (RANK[FORM[b.ext]] ?? 0)   // same-form runs stay contiguous → neighborhoods
+      || b.floors - a.floors);
     block.list.forEach((b, i) => place(state, block, b, i));
     block.next = block.list.length;
     for (let i = block.next; i < block.lots.length; i++) {  // leftover lots get dressing
@@ -156,8 +189,10 @@ const City = (() => {
     b.color = block.comp.color;
     b.arch = block.comp.kind;                               // NOT b.kind — that flags props
     b.heightScale = under ? .35 : 1;
-    b.foot = b.floors === 1 && !under ? .96                 // minnows join into terraces
-           : .55 + .38 * Math.min(1, Math.log10(b.loc + 1) / 4);
+    b.form = FORM[b.ext];
+    b.foot = FFOOT[b.form]
+           ?? (b.floors === 1 && !under ? .96               // minnows join into terraces
+              : .55 + .38 * Math.min(1, Math.log10(b.loc + 1) / 4));
     const j = hash(b.path), m = .4 * (1 - b.foot);          // jitter within the lot's free margin,
     b.x = lot.x + m * ((j % 5) - 2) / 2;                    // so terraces (foot .96) barely move
     b.y = lot.y + m * (((j >> 2) % 5) - 2) / 2;
@@ -183,7 +218,7 @@ const City = (() => {
     if (prop) prop.hidden = true;
     place(state, block, b, i);
     state.items.push(b);
-    const k = DKEY[state.sortedRot];
+    const k = dkey(state.sortedRot);
     state.items.sort((a, c) => k(a) - k(c));
     return b;
   }
@@ -191,7 +226,7 @@ const City = (() => {
   function applyEvent(state, e) {
     if (e.commit) {
       for (const b of state.buildings)
-        if (b.scaffold) { b.scaffold = false; b.floors = Math.min(b.floors + 1, 14); b.flash = performance.now(); }
+        if (b.scaffold) { b.scaffold = false; b.floors = Math.min(b.floors + 1, FCAP[b.form] ?? 14); b.flash = performance.now(); }
       return;
     }
     if (!e.path) return;
@@ -223,10 +258,12 @@ const City = (() => {
     quad(ctx, base[3], base[2], top[2], top[3], shade(b.color, .55));
     quad(ctx, base[2], base[1], top[1], top[2], shade(b.color, .75));
     quad(ctx, top[0], top[1], top[2], top[3], shade(b.color, 1.05));
-    if (h > 14 * cam.s && b.arch !== 'storage' && b.arch !== 'docs')
+    const form = FORMS[b.form];
+    if (h > 14 * cam.s && !form && b.arch !== 'storage' && b.arch !== 'docs')
       drawWindows(ctx, cam, base, h, b, t);
-    const pent = pop === 1 && !ARCH[b.arch] && b.classes >= 2 && b.floors >= 2;
-    if (ARCH[b.arch]) ARCH[b.arch](ctx, cam, b, base, top, h, t);
+    const pent = pop === 1 && !form && !ARCH[b.arch] && b.classes >= 2 && b.floors >= 2;
+    if (form) form(ctx, cam, b, base, top, h, t);           // file-type massing beats district dressing
+    else if (ARCH[b.arch]) ARCH[b.arch](ctx, cam, b, base, top, h, t);
     else if (pent) drawPenthouse(ctx, cam, b, h);
     else if (pop === 1) roofProps(ctx, cam, b, top, t);
     if (pop === 1 && !pent) langSign(ctx, cam, b, top);
@@ -331,6 +368,58 @@ const City = (() => {
     },
   };
 
+  // ---- ext-driven massing, drawn instead of district dressing ----
+  const FORMS = {
+    house(ctx, cam, b, base, top, h) {                      // hipped roof, door, one warm window
+      const s = cam.s;
+      const apex = lift({ sx: (top[1].sx + top[3].sx) / 2, sy: (top[0].sy + top[2].sy) / 2 },
+                        Math.min(7 * s, h * .55));          // roof scales with squat under-layer bodies
+      for (const [a, c, f] of [[top[3], top[2], .65], [top[2], top[1], .9]]) {
+        ctx.fillStyle = shade('#a8584a', f);
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy); ctx.lineTo(c.sx, c.sy); ctx.lineTo(apex.sx, apex.sy);
+        ctx.closePath(); ctx.fill();
+      }
+      const door = lerp(base[2], base[1], .5);
+      ctx.fillStyle = '#140c18';
+      ctx.fillRect(door.sx - 1.5 * s, door.sy - h * .45, 3 * s, h * .45);
+      const win = lerp(base[3], base[2], .5);
+      ctx.fillStyle = b.lit > .1 || hash(b.path) % 2 ? 'rgba(255,214,120,.85)' : 'rgba(20,12,24,.55)';
+      ctx.fillRect(win.sx - 2 * s, win.sy - h * .55, 4 * s, h * .3);
+    },
+    shed(ctx, cam, b, base, top, h) {                       // corrugated seams
+      ctx.strokeStyle = shade(b.color, .4);
+      ctx.lineWidth = Math.max(1, cam.s);
+      ctx.beginPath();
+      for (const [a, c] of [[base[3], base[2]], [base[2], base[1]]])
+        for (const u of [.25, .5, .75]) {
+          const p = lerp(a, c, u);
+          ctx.moveTo(p.sx, p.sy); ctx.lineTo(p.sx, p.sy - h * .8);
+        }
+      ctx.stroke();
+    },
+    garage(ctx, cam, b, base, top, h) {                     // slatted roll-up door
+      const p0 = lerp(base[2], base[1], .18), p1 = lerp(base[2], base[1], .82);
+      quad(ctx, p0, p1, lift(p1, h * .72), lift(p0, h * .72), '#8a8f98');
+      ctx.strokeStyle = '#4a3a4e';
+      ctx.lineWidth = Math.max(1, cam.s);
+      ctx.beginPath();
+      for (const k of [.2, .4, .6]) {
+        ctx.moveTo(p0.sx, p0.sy - h * k); ctx.lineTo(p1.sx, p1.sy - h * k);
+      }
+      ctx.stroke();
+    },
+    storefront(ctx, cam, b, base, top, h) {                 // glass front + awning band
+      const s = cam.s;
+      for (const [a, c] of [[base[3], base[2]], [base[2], base[1]]]) {
+        const p0 = lerp(a, c, .1), p1 = lerp(a, c, .9);
+        quad(ctx, lift(p0, s), lift(p1, s), lift(p1, h * .5), lift(p0, h * .5), 'rgba(126,222,255,.5)');
+        quad(ctx, lift(p0, h * .5), lift(p1, h * .5), lift(p1, h * .62), lift(p0, h * .62), '#c0395b');
+      }
+    },
+    silo: ARCH.storage,                                     // sql: domed tank
+  };
+
   const LANG = { py: '#3776ab', js: '#e8c41c', jsx: '#e8c41c', ts: '#3178c6', tsx: '#3178c6',
                  md: '#c9b78a', html: '#e34c26', css: '#8e5d9f', json: '#8a8f98', yml: '#cb6c6c',
                  yaml: '#cb6c6c', sh: '#89e051', go: '#00add8', rs: '#dea584', rb: '#cc342d',
@@ -338,7 +427,7 @@ const City = (() => {
 
   function langSign(ctx, cam, b, top) {                     // dominant-language rooftop sign
     const col = LANG[b.ext], seed = hash(b.path);
-    if (!col || b.floors < 2 || (seed >> 3) % 2) return;
+    if (!col || b.form || b.floors < 2 || (seed >> 3) % 2) return;   // forms own their roof
     if (['frontend', 'infra', 'storage'].includes(b.arch)) return;   // roof already busy
     const s = cam.s, x = (top[1].sx + top[3].sx) / 2 - 7 * s, y = (top[0].sy + top[2].sy) / 2;
     ctx.fillStyle = '#1a0a16';
@@ -488,7 +577,7 @@ const City = (() => {
   function draw(ctx, cam, state, t) {
     const R = cam.rot || 0;
     if (state.sortedRot !== R) {                            // painter's order follows the camera
-      const k = DKEY[R];
+      const k = dkey(R);
       state.items.sort((a, b) => k(a) - k(b));
       state.sortedRot = R;
     }
@@ -496,7 +585,7 @@ const City = (() => {
     CityScape.drawHorizon(ctx, flat, state, t);
     CityScape.drawWater(ctx, flat, state, t);
     CityScape.drawGround(ctx, cam, state, t);
-    if (state.deps.length) CityScape.drawStation(ctx, flat, state, t);
+    if (state.deps.length) CityScape.drawStation(ctx, cam, state, t);   // the freight line hugs the grid
     for (const it of state.items) {
       if (it.kind) { if (!it.hidden) CityScape.drawProp(ctx, cam, it, t); }
       else drawBuilding(ctx, cam, it, t);

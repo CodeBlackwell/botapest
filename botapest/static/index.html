@@ -18,29 +18,44 @@
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
     background: var(--pink);
     background-image:
       repeating-linear-gradient(45deg, transparent 0 22px, rgba(232,168,189,.35) 22px 44px);
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 28px 16px 40px;
+    padding: 12px 16px 16px;
     color: var(--plum);
   }
-  header { text-align: center; margin-bottom: 22px; }
+  header { text-align: center; margin-bottom: 10px; }
   header h1 {
     font-family: 'Limelight', cursive;
-    font-size: clamp(28px, 5vw, 52px);
+    font-size: clamp(20px, 2.6vw, 34px);
     letter-spacing: .06em;
     color: var(--plum);
-    text-shadow: 3px 3px 0 var(--gold);
+    text-shadow: 2px 2px 0 var(--gold);
   }
   header .rule {
     width: 320px; max-width: 70vw;
-    margin: 10px auto 6px;
+    margin: 6px auto 4px;
     border-top: 3px double var(--plum);
   }
+  #main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+  }
+  /* frame width derived from the height budget: canvases stack at 1060/1280 of width */
+  .frame {
+    width: min(calc((100vh - 160px) * 1.16), calc(100vw - 400px));
+  }
+  #citybg, #hotel { width: 100%; height: auto; }
   header p {
     font-family: 'Silkscreen', monospace;
     font-size: 11px;
@@ -57,22 +72,43 @@
     box-shadow: 0 18px 40px rgba(61,24,50,.45), inset 0 0 0 2px var(--plum-soft);
   }
   canvas { display: block; image-rendering: pixelated; background: #2a1024; }
-  #citybg { background: linear-gradient(#241020 0%, #3d1832 60%, #2a1024 100%); }
+  #citybg { background: linear-gradient(#241020 0%, #3d1832 60%, #2a1024 100%); cursor: grab; }
+  #citybg:active { cursor: grabbing; }
   .plaque {
     background: var(--gold); color: var(--plum);
     font-family: 'Silkscreen', monospace; font-size: 10px;
     letter-spacing: .22em; text-transform: uppercase;
     text-align: center; padding: 4px 0; border: 2px solid var(--plum-soft);
   }
+  #side {
+    width: clamp(230px, 21vw, 350px);
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+  }
+  #legend {
+    background: var(--cream);
+    border: 3px solid var(--plum);
+    box-shadow: 5px 5px 0 var(--plum);
+    font-family: 'Silkscreen', monospace;
+    font-size: 9px;
+    padding-bottom: 4px;
+  }
+  #legend .row { display: flex; align-items: center; gap: 8px; padding: 3px 10px; }
+  #legend .chip {
+    flex: 0 0 10px; height: 10px;
+    border: 1px solid var(--plum-soft);
+  }
   #ticker {
-    width: 1308px; max-width: 95vw;
-    margin-top: 18px;
+    flex: 1;
+    min-height: 0;
     background: var(--cream);
     border: 3px solid var(--plum);
     box-shadow: 5px 5px 0 var(--plum);
     font-family: 'Silkscreen', monospace;
     font-size: 10px;
-    max-height: 150px;
     overflow-y: auto;
   }
   #ticker div { padding: 4px 12px; border-bottom: 1px dashed var(--pink-deep); }
@@ -93,12 +129,29 @@
     <div class="rule"></div>
     <p><span id="lamp"></span>the city builds itself &middot; agents at your service</p>
   </header>
-  <div class="frame">
-    <canvas id="citybg" width="1280" height="500"></canvas>
-    <div class="plaque">city hall &middot; dispatch floor</div>
-    <canvas id="hotel" width="1280" height="560"></canvas>
+  <div id="main">
+    <div class="frame">
+      <canvas id="citybg" width="1280" height="500"></canvas>
+      <div class="plaque">city hall &middot; dispatch floor</div>
+      <canvas id="hotel" width="1280" height="560"></canvas>
+    </div>
+    <div id="side">
+      <div id="legend">
+        <div class="plaque">field guide</div>
+        <div class="row"><span class="chip" style="background:#d4a953"></span>floors — lines of code + coupling</div>
+        <div class="row"><span class="chip" style="background:#ffd678"></span>lit windows — touched recently</div>
+        <div class="row"><span class="chip" style="background:#52e3d4"></span>billboard — district's hottest third</div>
+        <div class="row"><span class="chip" style="background:#7edeff"></span>antennas — import hub</div>
+        <div class="row"><span class="chip" style="background:#c98f4a"></span>crane — TODO debt</div>
+        <div class="row"><span class="chip" style="background:#1d5a72"></span>canals — layer boundaries</div>
+        <div class="row"><span class="chip" style="background:#c0395b"></span>freight train — package deps</div>
+        <div class="row"><span class="chip" style="background:#2b2230"></span>ships — docker files</div>
+        <div class="row"><span class="chip" style="background:#6e7178"></span>graves — deleted files</div>
+        <div class="row" style="border-top:1px dashed var(--pink-deep)">drag pan &middot; scroll zoom &middot; Q/E rotate</div>
+      </div>
+      <div id="ticker"></div>
+    </div>
   </div>
-  <div id="ticker"></div>
   <div id="tooltip"></div>
   <script src="city-render.js"></script>
   <script src="city-scape.js"></script>

@@ -17,7 +17,7 @@ async function init() {
 
 window.addEventListener('keydown', e => {
   if (e.key === 'q' || e.key === 'e')
-    cam.rot = ((cam.rot || 0) + (e.key === 'q' ? 1 : 3)) % 4;
+    cam.rot = ((cam.rot || 0) + (e.key === 'q' ? 1 : 7)) % 8;
 });
 
 let drag = null;
