@@ -55,11 +55,16 @@ const City = (() => {
       let x = Math.floor((W - strip.used) / 2);
       strip.comps.forEach((comp, i) => {
         const block = { comp, list: strip.lists[i], x0: x, y0: y,
-                        cols: strip.widths[i], rows: strip.rows, lots: [], next: 0,
+                        cols: strip.widths[i], rows: strip.rows, lots: [], next: 0, carved: new Set(),
                         pave: [mix('#57455a', comp.color, .22), mix('#4d3d50', comp.color, .22)] };
+        let cap = block.rows * block.cols;                  // keep ≥2 spare lots for live growth
         for (let r = 0; r < block.rows; r++)
-          for (let c = 0; c < block.cols; c++)
-            block.lots.push({ x: x + c + .5, y: y + r + .5 });
+          for (let c = 0; c < block.cols; c++) {
+            const edge = !r || !c || r === block.rows - 1 || c === block.cols - 1;
+            if (edge && comp.kind !== 'civic' && cap > block.list.length + 2 &&
+                hash(`c${x + c},${y + r}`) % 3 === 0) { block.carved.add(`${x + c},${y + r}`); cap--; }
+            else block.lots.push({ x: x + c + .5, y: y + r + .5 });
+          }
         state.blocks.push(block);
         x += strip.widths[i] + 1;
       });
@@ -80,7 +85,8 @@ const City = (() => {
     state.blocks.forEach((block, i) => {
       for (let r = 0; r < block.rows; r++) {
         for (let c = 0; c < block.cols; c++)
-          g[block.y0 + r][block.x0 + c] = block.comp.kind === 'civic' ? 3 : 10 + i;
+          if (!block.carved.has(`${block.x0 + c},${block.y0 + r}`))
+            g[block.y0 + r][block.x0 + c] = block.comp.kind === 'civic' ? 3 : 10 + i;
         if (block.x0 + block.cols < state.W) g[block.y0 + r][block.x0 + block.cols] = 0;
       }
     });
@@ -117,13 +123,14 @@ const City = (() => {
   function place(state, block, b, i) {
     const under = block.comp.layer === 'under';
     const lot = block.lots[i];
-    b.x = lot.x;
-    b.y = lot.y;
     b.color = block.comp.color;
     b.arch = block.comp.kind;                               // NOT b.kind — that flags props
     b.heightScale = under ? .35 : 1;
     b.foot = b.floors === 1 && !under ? .96                 // minnows join into terraces
            : .55 + .38 * Math.min(1, Math.log10(b.loc + 1) / 4);
+    const j = hash(b.path), m = .4 * (1 - b.foot);          // jitter within the lot's free margin,
+    b.x = lot.x + m * ((j % 5) - 2) / 2;                    // so terraces (foot .96) barely move
+    b.y = lot.y + m * (((j >> 2) % 5) - 2) / 2;
     b.lit ??= Math.max(0, 1 - b.age_days / 240);
     state.buildings.push(b);
     state.byPath.set(b.path, b);
