@@ -42,7 +42,8 @@ canvas.addEventListener('mousemove', m => {
   if (hit) {
     const files = hit.files > 1 ? ` · ${hit.files} files` : '';
     tooltip.textContent = `${hit.path}${files} · ${hit.floors} fl · ${hit.loc} loc · `
-      + `${hit.commits} commits · touched ${hit.age_days}d ago`;
+      + `${hit.commits} commits · touched ${hit.age_days}d ago`
+      + (hit.todos ? ` · ${hit.todos} TODOs` : '');
     tooltip.style.left = `${m.clientX + 14}px`;
     tooltip.style.top = `${m.clientY + 14}px`;
     tooltip.style.display = 'block';

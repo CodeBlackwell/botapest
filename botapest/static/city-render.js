@@ -6,6 +6,7 @@ const City = (() => {
   const lift = (p, h) => ({ sx: p.sx, sy: p.sy - h });
   const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const depth = (a, b) => (a.x + a.y) - (b.x + b.y);
+  const q = (vals, k) => vals.sort((x, y) => x - y)[Math.floor(vals.length * k)] ?? 0;
 
   function shade(hex, f) {
     const n = parseInt(hex.slice(1), 16);
@@ -73,6 +74,10 @@ const City = (() => {
     state.W = W;
     state.H = y;
     buildGround(state);
+    state.cuts = {                                          // repo-relative thresholds, no absolutes
+      commits: q(data.buildings.map(b => b.commits), 2 / 3),
+      imports: q(data.buildings.map(b => b.imports || 0), .9),
+      todos: q(data.buildings.map(b => b.todos || 0), .9) };
     for (const block of state.blocks) fillBlock(state, block);
     state.items = [...state.buildings, ...state.props].sort(depth);
     state.clouds = data.zone.clouds.map((c, i) => ({ name: c.name, tether: c.tether, band: 60 + (i % 2) * 52 }));
@@ -102,8 +107,13 @@ const City = (() => {
 
   function fillBlock(state, block) {
     const under = block.comp.layer === 'under';
-    for (const b of block.list)
-      b.floors = under ? 1 : 1 + b.centrality + (b.commits >= 12 ? 1 : 0);
+    for (const b of block.list)                             // mass adds floors: +1 per loc decade past 100
+      b.floors = under ? 1 : 1 + b.centrality + (b.commits > state.cuts.commits ? 1 : 0)
+               + Math.max(0, Math.floor(Math.log10(b.loc + 1)) - 1);
+    const cuts = { commits: q(block.list.map(b => b.commits), 2 / 3),
+                   age: q(block.list.map(b => b.age_days), 1 / 3) };
+    for (const b of block.list)                             // each district spotlights its own active third
+      b.billboard = b.commits > cuts.commits || b.age_days < cuts.age;
     block.list.sort((a, b) => b.floors - a.floors);         // towers at the strip's back
     block.list.forEach((b, i) => place(state, block, b, i));
     block.next = block.list.length;
@@ -131,6 +141,8 @@ const City = (() => {
     const j = hash(b.path), m = .4 * (1 - b.foot);          // jitter within the lot's free margin,
     b.x = lot.x + m * ((j % 5) - 2) / 2;                    // so terraces (foot .96) barely move
     b.y = lot.y + m * (((j >> 2) % 5) - 2) / 2;
+    b.hub = b.imports > state.cuts.imports;
+    b.debt = b.todos > state.cuts.todos;
     b.lit ??= Math.max(0, 1 - b.age_days / 240);
     state.buildings.push(b);
     state.byPath.set(b.path, b);
@@ -144,7 +156,7 @@ const City = (() => {
     const block = state.blocks.find(bl => bl.comp === comp);
     if (!block || block.next >= block.lots.length) return null;
     const b = { path, component: comp.id, loc: 30, commits: 0, centrality: 0, age_days: 0,
-                files: 1, floors: 1, lit: 1, born: performance.now(),
+                files: 1, floors: 1, lit: 1, billboard: true, born: performance.now(),
                 ext: path.includes('.') ? path.split('.').pop().toLowerCase() : '' };
     const i = block.next++;
     const prop = state.props.find(p => p.block === block && p.lot === i);
@@ -191,9 +203,13 @@ const City = (() => {
     quad(ctx, top[0], top[1], top[2], top[3], shade(b.color, 1.05));
     if (h > 14 * cam.s && b.arch !== 'storage' && b.arch !== 'docs')
       drawWindows(ctx, cam, base, h, b, t);
+    const pent = pop === 1 && !ARCH[b.arch] && b.classes >= 2 && b.floors >= 2;
     if (ARCH[b.arch]) ARCH[b.arch](ctx, cam, b, base, top, h, t);
+    else if (pent) drawPenthouse(ctx, cam, b, h);
     else if (pop === 1) roofProps(ctx, cam, b, top, t);
-    if (pop === 1) langSign(ctx, cam, b, top);
+    if (pop === 1 && !pent) langSign(ctx, cam, b, top);
+    if (pop === 1 && b.hub && b.floors >= 2) drawAntennas(ctx, cam, b, top, t);
+    if (pop === 1 && b.debt && b.floors >= 2 && !pent) drawCrane(ctx, cam, b, top, t);
     if (b.scaffold) drawScaffold(ctx, cam, base, h);
     if (b.flash && t - b.flash < 1500) drawFlash(ctx, cam, top, (t - b.flash) / 1500);
     b.screen = { sx: (base[1].sx + base[3].sx) / 2, top: top[2].sy - 4,
@@ -248,7 +264,7 @@ const City = (() => {
     },
     frontend(ctx, cam, b, base, top, h, t) {                // rooftop billboard
       const s = cam.s, seed = hash(b.path);
-      if (b.floors < 2 && seed % 3) return;                 // thin out flat-roof rows
+      if (!b.billboard) return;                             // active buildings advertise (repo-relative)
       const cx = (top[1].sx + top[3].sx) / 2, cy = (top[0].sy + top[2].sy) / 2;
       ctx.fillStyle = '#1a0a16';
       ctx.fillRect(cx - 9 * s, cy - 13 * s, 18 * s, 9 * s);
@@ -313,6 +329,46 @@ const City = (() => {
       ctx.textAlign = 'center';
       ctx.fillText(b.ext.slice(0, 2).toUpperCase(), x, y - 6.5 * s);
     }
+  }
+
+  function drawPenthouse(ctx, cam, b, h) {                  // class-heavy: setback tier
+    const f = b.foot * .3, hp = (8 + 3 * Math.min(3, b.classes)) * cam.s;
+    const base = [proj(cam, b.x - f, b.y - f), proj(cam, b.x + f, b.y - f),
+                  proj(cam, b.x + f, b.y + f), proj(cam, b.x - f, b.y + f)].map(p => lift(p, h));
+    const top = base.map(p => lift(p, hp));
+    quad(ctx, base[3], base[2], top[2], top[3], shade(b.color, .62));
+    quad(ctx, base[2], base[1], top[1], top[2], shade(b.color, .85));
+    quad(ctx, top[0], top[1], top[2], top[3], shade(b.color, 1.15));
+  }
+
+  function drawAntennas(ctx, cam, b, top, t) {              // high import fan-out: comms roof
+    const s = cam.s, seed = hash(b.path);
+    for (const [u, i] of [[.15, 0], [.85, 1]]) {
+      const x = top[3].sx + (top[1].sx - top[3].sx) * u;
+      const y = top[0].sy + (top[2].sy - top[0].sy) * .5;
+      const ah = (9 + (seed >> i) % 5) * s;
+      ctx.strokeStyle = '#1a0a16';
+      ctx.lineWidth = Math.max(1, s);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - ah); ctx.stroke();
+      ctx.fillStyle = `rgba(126,222,255,${.4 + .4 * Math.sin(t / 500 + i * 2 + seed)})`;
+      ctx.fillRect(x - s, y - ah - 2 * s, 2 * s, 2 * s);
+    }
+  }
+
+  function drawCrane(ctx, cam, b, top, t) {                 // TODO debt: rooftop crane
+    const s = cam.s, seed = hash(b.path);
+    const x = top[3].sx + (top[1].sx - top[3].sx) * .3;
+    const y = top[0].sy + (top[2].sy - top[0].sy) * .5;
+    const mh = 16 * s, jib = 14 * s, hx = x + jib * .8 + Math.sin(t / 1600 + seed) * 3 * s;
+    ctx.strokeStyle = '#c98f4a';
+    ctx.lineWidth = Math.max(1, 1.3 * s);
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y - mh);
+    ctx.moveTo(x - 4 * s, y - mh); ctx.lineTo(x + jib, y - mh);
+    ctx.moveTo(hx, y - mh); ctx.lineTo(hx, y - mh + 6 * s);
+    ctx.stroke();
+    ctx.fillStyle = '#c0395b';
+    ctx.fillRect(hx - 1.5 * s, y - mh + 6 * s, 3 * s, 3 * s);
   }
 
   function roofProps(ctx, cam, b, top, t) {

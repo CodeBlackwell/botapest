@@ -4,11 +4,16 @@ Per building: loc (mass), commits + age (attention), centrality (how many
 other components it has co-committed with). A component may set "group": N
 to aggregate files into one building per N-segment path prefix.
 """
+import re
 import subprocess
 import time
 from collections import Counter
 from fnmatch import fnmatch
 from pathlib import Path
+
+CLASS = re.compile(r"^\s*(export |abstract |public |final )*(class|interface|struct|trait)\b")
+IMPORT = re.compile(r"^\s*(import|from|require|use|#include)\b|=\s*require\(")
+TODO = re.compile(r"TODO|FIXME|HACK")
 
 
 def git(repo: str, *args: str) -> str:
@@ -22,11 +27,20 @@ def component_of(path: str, components: list) -> str | None:
     return None
 
 
-def count_lines(path: Path) -> int:
+def scan(path: Path) -> tuple[int, int, int, int]:
+    loc = classes = imports = todos = 0
     try:
-        return sum(1 for _ in open(path, errors="ignore"))
+        for line in open(path, errors="ignore"):
+            loc += 1
+            if CLASS.match(line):
+                classes += 1
+            elif IMPORT.search(line):
+                imports += 1
+            if TODO.search(line):
+                todos += 1
     except OSError:
-        return 0
+        pass
+    return loc, classes, imports, todos
 
 
 def seed(repo: str, zone: dict) -> dict:
@@ -60,8 +74,13 @@ def seed(repo: str, zone: dict) -> dict:
         depth = group[comp[f]]
         key = "/".join(f.split("/")[:depth]) if depth else f
         b = buildings.setdefault(key, {"path": key, "component": comp[f], "loc": 0,
-                                       "commits": 0, "centrality": 0, "age_days": 9999, "files": 0})
-        b["loc"] += count_lines(Path(repo, f))
+                                       "commits": 0, "centrality": 0, "age_days": 9999, "files": 0,
+                                       "classes": 0, "imports": 0, "todos": 0})
+        loc, classes, imports, todos = scan(Path(repo, f))
+        b["loc"] += loc
+        b["classes"] += classes
+        b["imports"] += imports
+        b["todos"] += todos
         b["commits"] += commits[f]
         b["centrality"] = max(b["centrality"], len(cocomp[f]))
         if last[f]:
