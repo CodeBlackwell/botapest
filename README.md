@@ -1,11 +1,18 @@
-# The Grand Botapest Hotel
+# Botapest City
 
-A Habbo-style isometric visualization of Claude Code at work. Every agent is a
-pixel guest: the concierge (your main session) checks in at reception, subagents
-walk through the door when spawned, and tool calls send guests to stations —
-the CRT terminal for `Bash`, the archive shelf for `Read`/`Grep`, the workshop
-for `Edit`/`Write`, the telephone booth for web tools. Guests check out when
-their agent stops.
+A Habbo-style isometric visualization of Claude Code at work, in two views on
+one page. **The dispatch floor** (City Hall): every agent is a pixel worker —
+your main session checks in at reception, subagents walk through the door when
+spawned, and tool calls send workers to stations — the CRT terminal for `Bash`,
+the archive shelf for `Read`/`Grep`, the workshop for `Edit`/`Write`, the
+telephone booth for web tools. **The skyline above**: the city is the codebase
+itself, seeded from git history and zoned by architecture (`city/<repo>.json`
+maps globs to components and layers; floors = cross-component centrality,
+footprint = lines of code, window glow = recency; managed services float as
+tethered clouds). As agents work, the city builds itself out — edits wrap
+buildings in scaffolding, a `git commit` drops the scaffolds and adds floors,
+new files pop up new buildings. `/city.html` is a full-screen explorer with
+pan/zoom. Re-seed with `just city <repo> [zone]`.
 
 ## Quickstart
 

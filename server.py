@@ -43,6 +43,11 @@ def normalize(raw: dict) -> dict:
         if detail.startswith("/"):
             detail = os.path.basename(detail)
         event["detail"] = str(detail)[:MAX_DETAIL]
+        file_path, cwd = tool_input.get("file_path") or "", raw.get("cwd") or ""
+        if cwd and file_path.startswith(cwd + "/"):
+            event["path"] = file_path[len(cwd) + 1:]
+        if tool == "Bash" and "git commit" in str(tool_input.get("command") or ""):
+            event["commit"] = True
         if tool in ("Task", "Agent"):
             event["agent_type"] = tool_input.get("subagent_type", "agent")
             event["agent_name"] = str(tool_input.get("description", "agent"))[:40]

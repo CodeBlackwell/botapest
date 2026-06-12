@@ -1,5 +1,5 @@
 // Isometric room + Habbo-style pixel avatars, plain canvas.
-const GRID = 12, HW = 32, HH = 16, OX = 482, OY = 96, WALL = 58, DOOR_Y = 7;
+const GRID = 12, HW = 32, HH = 16, OX = 640, OY = 96, WALL = 58, DOOR_Y = 7;
 const SKIN = '#f0c8a0', FLOOR_A = '#c9a878', FLOOR_B = '#bb9a6a', LINE = '#a3855a';
 
 const iso = (x, y) => ({ sx: OX + (x - y) * HW, sy: OY + (x + y) * HH });
@@ -141,7 +141,7 @@ function drawBubble(ctx, cx, top, text, age) {
   ctx.globalAlpha = alpha;
   ctx.font = '9px Silkscreen, monospace';
   const w = Math.min(ctx.measureText(text).width + 14, 230);
-  const x = Math.max(8, Math.min(cx - w / 2, 964 - w - 8)), y = top - 24;
+  const x = Math.max(8, Math.min(cx - w / 2, 1280 - w - 8)), y = top - 24;
   ctx.fillStyle = '#fffdf7';
   ctx.strokeStyle = '#3d1832';
   ctx.lineWidth = 2;
@@ -158,7 +158,7 @@ function drawBubble(ctx, cx, top, text, age) {
 }
 
 function render(ctx, avatars, t) {
-  ctx.clearRect(0, 0, 964, 560);
+  ctx.clearRect(0, 0, 1280, 560);
   drawRoom(ctx);
   const items = [
     ...FURNITURE.map(f => ({ depth: f.x + f.y, draw: () => { const a = anchor(f); f.draw(ctx, a.cx, a.base); } })),

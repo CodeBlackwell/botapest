@@ -53,6 +53,7 @@ function checkout(av) {
 }
 
 function handle(e) {
+  cityHandle(e);                            // the skyline grows from the same events
   if (e.agent_id) handleAgent(e);
   else handleMain(e);
   tick(e);
@@ -167,15 +168,16 @@ if (new URLSearchParams(location.search).has('demo')) {
     { event: 'PreToolUse', session: 'demo1234', tool: 'Read', detail: 'server.py' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Agent', agent_type: 'Explore', agent_name: 'survey the lobby' },
     { event: 'PreToolUse', session: 'demo1234', agent_id: 'scout01', agent_type: 'Explore', tool: 'Grep', detail: 'lobby' },
-    { event: 'PreToolUse', session: 'demo1234', tool: 'Edit', detail: 'hotel.js' },
+    { event: 'PreToolUse', session: 'demo1234', tool: 'Edit', detail: 'app.py', path: 'backend/api/app.py' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Agent', agent_type: 'Plan', agent_name: 'draw blueprints' },
     { event: 'PreToolUse', session: 'demo1234', agent_id: 'plan01', agent_type: 'Plan', tool: 'Read', detail: 'render.js' },
     { event: 'Notification', session: 'demo1234', detail: 'permission needed: Bash' },
     { event: 'PreToolUse', session: 'demo1234', tool: 'Bash', detail: 'just test' },
     { event: 'PreToolUse', session: 'demo1234', agent_id: 'scout01', agent_type: 'Explore', tool: 'WebSearch', detail: 'habbo furni' },
     { event: 'SubagentStop', session: 'demo1234', agent_id: 'scout01' },
-    { event: 'PreToolUse', session: 'demo1234', tool: 'Write', detail: 'render.js' },
+    { event: 'PreToolUse', session: 'demo1234', tool: 'Write', detail: 'skyline.tsx', path: 'frontend/src/reading/skyline.tsx' },
     { event: 'SubagentStop', session: 'demo1234', agent_id: 'plan01' },
+    { event: 'PreToolUse', session: 'demo1234', tool: 'Bash', detail: 'git commit -m ship', commit: true },
     { event: 'Stop', session: 'demo1234' },
   ];
   let i = 0;
