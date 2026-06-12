@@ -42,7 +42,12 @@ def main() -> None:
         free_port(args.port)
         server.configure(args.repo, args.zone)
         print(f"Botapest City on http://localhost:{args.port} (repo: {args.repo})")
-        uvicorn.run(server.app, port=args.port, log_level="warning")
+        # SSE streams watch runner.should_exit so open browsers don't block Ctrl+C;
+        # the graceful-shutdown timeout is the backstop for any other slow request
+        runner = uvicorn.Server(uvicorn.Config(server.app, port=args.port,
+                                               log_level="warning", timeout_graceful_shutdown=2))
+        server.runner = runner
+        runner.run()
 
 
 if __name__ == "__main__":

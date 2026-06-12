@@ -21,6 +21,7 @@ app = FastAPI()
 subscribers: set[asyncio.Queue] = set()
 history: deque = deque(maxlen=100)
 city = {"repo": ".", "zone_path": None, "head": None, "data": None}
+runner = None       # uvicorn.Server, set by cli — lets SSE streams end on Ctrl+C
 
 
 def configure(repo: str, zone_path: str | None) -> None:
@@ -97,9 +98,9 @@ async def events() -> StreamingResponse:
     async def stream():
         try:
             yield "retry: 2000\n\n"
-            while True:
+            while not (runner and runner.should_exit):
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=15)
+                    event = await asyncio.wait_for(queue.get(), timeout=1)
                     yield f"data: {json.dumps(event)}\n\n"
                 except asyncio.TimeoutError:
                     yield ": ping\n\n"
