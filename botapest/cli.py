@@ -31,6 +31,7 @@ def main() -> None:
                         help="serve the city (default), or attach/detach Claude Code hooks")
     parser.add_argument("--repo", default=".", help="git repo to map as the city (default: cwd)")
     parser.add_argument("--zone", help="zoning manifest (default: <repo>/.botapest.json, else auto-zoned)")
+    parser.add_argument("--root", help="map every git repo under this dir as a nation of cities")
     parser.add_argument("--port", type=int, default=4242)
     args = parser.parse_args()
 
@@ -41,7 +42,10 @@ def main() -> None:
     else:
         free_port(args.port)
         server.configure(args.repo, args.zone)
-        print(f"Botapest City on http://localhost:{args.port} (repo: {args.repo})")
+        if args.root:
+            server.configure_nation(args.root, None)
+        where = f"nation: {args.root}" if args.root else f"repo: {args.repo}"
+        print(f"Botapest {'Nation' if args.root else 'City'} on http://localhost:{args.port} ({where})")
         # SSE streams watch runner.should_exit so open browsers don't block Ctrl+C;
         # the graceful-shutdown timeout is the backstop for any other slow request
         runner = uvicorn.Server(uvicorn.Config(server.app, port=args.port,

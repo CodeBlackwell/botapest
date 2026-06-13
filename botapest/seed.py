@@ -123,14 +123,24 @@ def detect_clouds(repo: str, comp: dict[str, str | None]) -> list[dict]:
     return clouds
 
 
-def dead_files(repo: str, alive: set[str]) -> list[str]:
-    gone: list[str] = []
-    for line in git(repo, "log", "-M", "--diff-filter=D", "--name-only", "--pretty=").splitlines():
-        if line and line not in alive and line not in gone:
-            gone.append(line)
-        if len(gone) == 24:                     # cemetery plot capacity
-            break
-    return gone
+def dead_files(repo: str, alive: set[str]) -> list[dict]:
+    died: dict[str, int] = {}                   # path -> deletion commit time (newest deletion wins)
+    ts = 0
+    for line in git(repo, "log", "-M", "--diff-filter=D", "--name-only", "--pretty=%ct").splitlines():
+        if line.isdigit():
+            ts = int(line)
+        elif line and line not in alive and line not in died:
+            died[line] = ts
+            if len(died) == 24:                 # cemetery plot capacity
+                break
+    born: dict[str, int] = {}                   # earliest add: newest-first log, last write is oldest
+    ts = 0
+    for line in git(repo, "log", "--diff-filter=A", "--name-only", "--pretty=%ct").splitlines():
+        if line.isdigit():
+            ts = int(line)
+        elif line in died:
+            born[line] = ts
+    return [{"path": p, "born": born.get(p), "died": d} for p, d in died.items()]
 
 
 def seed(repo: str, zone: dict) -> dict:

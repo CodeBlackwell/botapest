@@ -97,7 +97,7 @@ const CityScape = (() => {
     ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
   }
 
-  function drawProp(ctx, cam, p, t) {
+  function drawProp(ctx, cam, p, t, state) {
     const { sx, sy } = proj(cam, p.x, p.y), s = cam.s, base = sy + 6 * s;
     if (p.kind === 'tree') {
       ctx.fillStyle = '#6b4226';
@@ -129,6 +129,9 @@ const CityScape = (() => {
         ctx.fillRect(sx - s, base - 9 * s, 2 * s, 9 * s);
         ctx.fillRect(sx - 3 * s, base - 7 * s, 6 * s, 2 * s);
       }
+      if (state)                                            // hovering any stone lists the whole graveyard
+        hit(ctx, state, { x0: sx - 4 * s, x1: sx + 4 * s, y0: base - 10 * s, y1: base + 2 * s,
+                          tip: state.graveTip, scroll: true }, s);
     } else if (p.kind === 'crates') {
       ctx.fillStyle = '#9c6b35';
       ctx.fillRect(sx - 6 * s, base - 6 * s, 6 * s, 6 * s);

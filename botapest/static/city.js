@@ -55,7 +55,11 @@ canvas.addEventListener('mousemove', m => {
     return;
   }
   const hit = state && City.pick(state, (m.clientX - r.left) * kx, (m.clientY - r.top) * ky);
-  if (hit) {
+  if (hit && hit.scroll) {
+    City.roster(hit.tip, m.clientX, m.clientY);
+    tooltip.style.display = 'none';
+  } else if (hit) {
+    City.roster('');
     const files = hit.files > 1 ? ` · ${hit.files} files` : '';
     tooltip.textContent = hit.tip || `${hit.path}${files} · ${hit.floors} fl · ${hit.loc} loc · `
       + `${hit.commits} commits · touched ${hit.age_days}d ago`
@@ -63,7 +67,7 @@ canvas.addEventListener('mousemove', m => {
     tooltip.style.left = `${m.clientX + 14}px`;
     tooltip.style.top = `${m.clientY + 14}px`;
     tooltip.style.display = 'block';
-  } else tooltip.style.display = 'none';
+  } else { City.roster(''); tooltip.style.display = 'none'; }
 });
 
 init();

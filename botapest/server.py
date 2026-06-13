@@ -10,22 +10,37 @@ import os
 from collections import deque
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from .nation import discover_repos, load_nation
 from .seed import git, seed
 from .zone import load_zone
 
 app = FastAPI()
 subscribers: set[asyncio.Queue] = set()
 history: deque = deque(maxlen=100)
-city = {"repo": ".", "zone_path": None, "head": None, "data": None}
+city = {"repo": ".", "zone_path": None}
+nation = {"root": None, "manifest": None}
+seeded: dict[str, dict] = {}        # repo path -> {head, data}, cached per git HEAD
 runner = None       # uvicorn.Server, set by cli — lets SSE streams end on Ctrl+C
 
 
 def configure(repo: str, zone_path: str | None) -> None:
-    city.update(repo=repo, zone_path=zone_path, head=None, data=None)
+    city.update(repo=repo, zone_path=zone_path)
+
+
+def configure_nation(root: str, manifest: str | None) -> None:
+    nation.update(root=root, manifest=manifest)
+
+
+def seed_cached(repo: str, zone_path: str | None = None) -> dict:
+    head = git(repo, "rev-parse", "HEAD").strip()
+    cur = seeded.get(repo)
+    if not cur or cur["head"] != head:
+        cur = seeded[repo] = {"head": head, "data": seed(repo, load_zone(repo, zone_path))}
+    return cur["data"]
 
 MAX_DETAIL = 80
 
@@ -79,13 +94,18 @@ async def hook(request: Request) -> dict:
     return {"ok": True}
 
 
+@app.get("/nation-data.json")
+def nation_data() -> dict:
+    return load_nation(nation["root"], nation["manifest"])
+
+
 @app.get("/city-data.json")
-def city_data() -> dict:
-    head = git(city["repo"], "rev-parse", "HEAD").strip()
-    if city["head"] != head:
-        city["data"] = seed(city["repo"], load_zone(city["repo"], city["zone_path"]))
-        city["head"] = head
-    return city["data"]
+def city_data(repo: str | None = None):
+    if repo:                                    # nation drill-down: only discovered repos
+        if not nation["root"] or repo not in discover_repos(nation["root"]):
+            return Response(status_code=404)
+        return seed_cached(str(Path(nation["root"]) / repo))
+    return seed_cached(city["repo"], city["zone_path"])
 
 
 @app.get("/events")
@@ -116,6 +136,12 @@ async def no_stale_assets(request: Request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@app.get("/")
+def root() -> FileResponse:
+    page = "nation.html" if nation["root"] else "index.html"
+    return FileResponse(Path(__file__).parent / "static" / page)
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")

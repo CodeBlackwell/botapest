@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Botapest City</title>
+<title>Botapest Nation</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🏙️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🗺️</text></svg>">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Limelight&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -42,23 +42,17 @@
   #tooltip { position: fixed; display: none; pointer-events: none; z-index: 10;
              background: var(--cream); border: 2px solid var(--plum);
              box-shadow: 3px 3px 0 var(--plum); font-family: 'Silkscreen', monospace;
-             font-size: 10px; padding: 4px 8px; max-width: 420px;
-             white-space: pre-line; line-height: 1.5; }
-  #roster { position: fixed; display: none; z-index: 11;
-            background: var(--cream); border: 2px solid var(--plum); box-shadow: 3px 3px 0 var(--plum);
-            font-family: 'Silkscreen', monospace; font-size: 10px; line-height: 1.6;
-            padding: 8px 10px; max-width: 420px; max-height: 55vh; overflow-y: auto;
-            white-space: pre-line; cursor: default; }
+             font-size: 10px; padding: 4px 8px; max-width: 460px; }
 </style>
 </head>
 <body>
   <header>
-    <h1>Botapest City</h1>
+    <h1>Botapest Nation</h1>
     <div></div>
-    <p>drag to pan &middot; scroll to zoom &middot; Q/E to rotate</p>
+    <p>drag to pan &middot; scroll to zoom &middot; click a city to fly in &middot; Q/E to rotate</p>
   </header>
   <div class="frame"><div class="mapwrap">
-    <canvas id="city" width="1280" height="720"></canvas>
+    <canvas id="nation" width="1280" height="720"></canvas>
     <div id="mapctl">
       <button data-act="rot-" title="rotate left (Q)">&#8634;</button>
       <button data-act="rot+" title="rotate right (E)">&#8635;</button>
@@ -68,9 +62,8 @@
     </div>
   </div></div>
   <div id="tooltip"></div>
-  <div id="roster"></div>
   <script src="city-render.js"></script>
   <script src="city-scape.js"></script>
-  <script src="city.js"></script>
+  <script src="nation.js"></script>
 </body>
 </html>

@@ -78,11 +78,15 @@ cityCanvas.addEventListener('mousemove', m => {
     (m.clientX - r.left) * (cityCanvas.width / r.width),
     (m.clientY - r.top) * (cityCanvas.height / r.height));
   const tip = document.getElementById('tooltip');
-  if (hit) {
+  if (hit && hit.scroll) {
+    City.roster(hit.tip, m.clientX, m.clientY);
+    tip.style.display = 'none';
+  } else if (hit) {
+    City.roster('');
     tip.textContent = hit.tip || `${hit.path} · ${hit.floors} fl · ${hit.commits} commits`
       + `${hit.scaffold ? ' · under construction' : ''}`;
     tip.style.left = `${m.clientX + 14}px`;
     tip.style.top = `${m.clientY + 14}px`;
     tip.style.display = 'block';
-  } else tip.style.display = 'none';
+  } else { City.roster(''); tip.style.display = 'none'; }
 });

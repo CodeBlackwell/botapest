@@ -78,8 +78,15 @@ const City = (() => {
     const Rmax = r - 1, margin = 3, cx = margin + Rmax, cy = cx;
     state.W = state.H = 2 * Rmax + 2 * margin + 1;
     if ((data.dead || []).length) {
-      state.graves = data.dead.map((path, i) =>
-        ({ kind: 'grave', path, x: 2.5 + (i % 8) * 1.2, y: state.H + .7 + Math.floor(i / 8), seed: hash(path) }));
+      state.graves = data.dead.map((d, i) =>
+        ({ kind: 'grave', path: d.path, born: d.born, died: d.died,
+           x: 2.5 + (i % 8) * 1.2, y: state.H + .7 + Math.floor(i / 8), seed: hash(d.path) }));
+      const fmt = ts => ts ? new Date(ts * 1000).toLocaleDateString() : '?';
+      const age = (a, b) => !a || !b ? '?'
+        : (b - a) >= 31536000 ? `${((b - a) / 31536000).toFixed(1)}y` : `${Math.round((b - a) / 86400)}d`;
+      state.graveTip = state.graves
+        .map(g => `🪦 ${g.path} · born ${fmt(g.born)} · died ${fmt(g.died)} · ${age(g.born, g.died)}`)
+        .join('\n');
       state.cemetery = { y0: state.H, rows: Math.ceil(state.graves.length / 8), x1: Math.min(state.W - 1, 13) };
       state.props.push(...state.graves);
       state.H += state.cemetery.rows + 1;
@@ -579,7 +586,7 @@ const City = (() => {
     ctx.fillText(cloud.name, x, sy - 24 * s);
   }
 
-  function draw(ctx, cam, state, t) {
+  function draw(ctx, cam, state, t, opts = {}) {
     const R = cam.rot || 0;
     if (state.sortedRot !== R) {                            // painter's order follows the camera
       const k = dkey(R);
@@ -588,16 +595,19 @@ const City = (() => {
     }
     state.hits = [];                                        // hover targets rebuilt each frame
     const flat = R ? { ...cam, rot: 0 } : cam;              // only the distant horizon stays screen-anchored
-    CityScape.drawHorizon(ctx, flat, state, t);
-    CityScape.drawWater(ctx, cam, state, t);
+    if (!opts.embedded) {                                   // embedded = one city blooming inside the nation map
+      CityScape.drawHorizon(ctx, flat, state, t);
+      CityScape.drawWater(ctx, cam, state, t);
+    }
     CityScape.drawGround(ctx, cam, state, t);
-    if (state.deps.length) CityScape.drawStation(ctx, cam, state, t);   // the freight line hugs the grid
+    if (!opts.embedded && state.deps.length) CityScape.drawStation(ctx, cam, state, t);   // freight hugs the grid
     for (const it of state.items) {
-      if (it.kind) { if (!it.hidden) CityScape.drawProp(ctx, cam, it, t); }
+      if (it.kind) { if (!it.hidden) CityScape.drawProp(ctx, cam, it, t, state); }
       else drawBuilding(ctx, cam, it, t);
     }
     if (state.cityHall) drawCityHall(ctx, cam, state.cityHall.x, state.cityHall.y);
-    if (state.docker) CityScape.drawPort(ctx, cam, state, t);   // ships ride the rotating harbor
+    if (!opts.embedded && state.docker) CityScape.drawPort(ctx, cam, state, t);   // ships ride the rotating harbor
+    if (opts.embedded) return;
     ctx.fillStyle = 'rgba(243,207,217,.6)';
     for (const block of state.blocks) {
       const p = proj(cam, block.lx, block.ly + .55);
@@ -627,5 +637,28 @@ const City = (() => {
     return hit;
   }
 
-  return { layout, fit, draw, applyEvent, pick, proj, hash, shade, mix, near };
+  let rosterT = null, rosterShown = false, rosterWired = false;
+  function roster(text, x, y) {                            // pinned, scrollable panel for long hit lists
+    const el = document.getElementById('roster');
+    if (!el) return;
+    if (!rosterWired) {
+      el.addEventListener('mouseenter', () => clearTimeout(rosterT));
+      el.addEventListener('mouseleave', () => { el.style.display = 'none'; rosterShown = false; });
+      rosterWired = true;
+    }
+    if (text) {
+      clearTimeout(rosterT);
+      if (el.dataset.t !== text) { el.textContent = text; el.dataset.t = text; }
+      if (!rosterShown) {                                  // place once so it stays put while scrolling
+        el.style.display = 'block';
+        el.style.left = Math.min(x + 14, innerWidth - el.offsetWidth - 12) + 'px';
+        el.style.top = Math.max(12, Math.min(y + 14, innerHeight - el.offsetHeight - 12)) + 'px';
+        rosterShown = true;
+      }
+    } else if (rosterShown) {
+      rosterT = setTimeout(() => { el.style.display = 'none'; rosterShown = false; }, 250);
+    }
+  }
+
+  return { layout, fit, draw, applyEvent, pick, roster, proj, hash, shade, mix, near };
 })();
